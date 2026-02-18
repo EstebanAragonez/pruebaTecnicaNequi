@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: franquicias-api
+
+  r2dbc:
+    url: r2dbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:franquicias_db}
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:postgres}
+    pool:
+      initial-size: 5
+      max-size: 10
+
+server:
+  port: ${SERVER_PORT:8080}
+
+logging:
+  level:
+    root: INFO
+    com.nequi.franquicias: DEBUG
+    io.r2dbc.postgresql: WARN
+    org.springframework.r2dbc: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
