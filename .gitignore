@@ -1,0 +1,17 @@
+# Build
+build/
+.gradle/
+*.jar
+*.war
+
+# IDE
+.idea
+.vscode
+*.iml
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

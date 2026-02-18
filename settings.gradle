@@ -1,0 +1,22 @@
+pluginManagement {
+    repositories {
+        maven { url = uri("https://repo.maven.apache.org/maven2") }
+        maven { url = uri("https://plugins.gradle.org/m2") }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+rootProject.name = 'franquicias-api'
+
+include 'model'
+include 'usecase'
+include 'r2dbc-postgres'
+include 'rest-webflux'
+include 'app-service'
+
+project(':model').projectDir = file('domain/model')
+project(':usecase').projectDir = file('domain/usecase')
+project(':r2dbc-postgres').projectDir = file('infrastructure/driven-adapters/r2dbc-postgres')
+project(':rest-webflux').projectDir = file('infrastructure/entry-points/rest-webflux')
+project(':app-service').projectDir = file('applications/app-service')
