@@ -1,0 +1,75 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.2' apply false
+    id 'io.spring.dependency-management' version '1.1.4' apply false
+    id 'jacoco'
+}
+
+allprojects {
+    group = 'com.nequi'
+    version = '1.0.0-SNAPSHOT'
+
+    repositories {
+        mavenCentral()
+    }
+}
+
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'io.spring.dependency-management'
+    apply plugin: 'jacoco'
+    jacoco {
+        toolVersion = '0.8.11'
+    }
+
+    java {
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
+    }
+
+    dependencyManagement {
+        imports {
+            mavenBom org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES
+        }
+        dependencies {
+            dependency 'org.springdoc:springdoc-openapi-starter-webflux-ui:2.6.0'
+        }
+    }
+
+    tasks.named('compileJava') {
+        options.compilerArgs.add('-parameters')
+    }
+
+    tasks.named('test') {
+        useJUnitPlatform()
+    }
+
+    plugins.withId('jacoco') {
+        tasks.named('jacocoTestReport') {
+            reports {
+                xml.required = true
+                html.required = true
+            }
+        }
+        tasks.named('test').configure {
+            finalizedBy tasks.named('jacocoTestReport')
+        }
+    }
+}
+
+tasks.register('jacocoRootReport', JacocoReport) {
+    dependsOn subprojects.collect { it.tasks.named('test') }
+    subprojects.each { sub ->
+        def execFile = sub.file("${sub.layout.buildDirectory.get().asFile}/jacoco/test.exec")
+        executionData.from(execFile)
+    }
+    sourceDirectories.from(subprojects.collect { it.sourceSets.main.java.srcDirs }.flatten())
+    classDirectories.from(subprojects.collect { it.sourceSets.main.output.classesDirs }.flatten())
+    reports {
+        xml.required = true
+        html.required = true
+    }
+    doFirst {
+        executionData.setFrom(files(executionData.files.findAll { it.exists() }))
+    }
+}
