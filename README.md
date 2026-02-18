@@ -6,43 +6,68 @@ API reactiva para gestión de franquicias, sucursales y productos. Desarrollada 
 
 ## Arquitectura
 
-El proyecto sigue Clean Architecture con una estructura multi-módulo en Gradle:
+El proyecto aplica **Clean Architecture** y **Hexagonal Architecture (Ports & Adapters)** mediante una estructura multi-módulo en Gradle.
+
+### Estructura del proyecto
 
 ```
 pruebaTecnicaNequi/
 ├── applications/
-│   └── app-service/              # Módulo bootable - MainApplication, config, resources
+│   └── app-service/              # Módulo bootable - MainApplication, UseCaseConfig, schema.sql
 ├── domain/
-│   ├── model/                    # Modelos de dominio y puertos (interfaces)
-│   └── usecase/                  # Casos de uso (lógica de negocio)
+│   ├── model/                    # Entidades de dominio y puertos (interfaces)
+│   └── usecase/                  # Casos de uso - orquestan la lógica de negocio
 ├── infrastructure/
 │   ├── driven-adapters/
-│   │   └── r2dbc-postgres/       # Adaptador de persistencia PostgreSQL R2DBC
+│   │   └── r2dbc-postgres/       # Adaptadores que implementan los puertos (PostgreSQL R2DBC)
 │   ├── entry-points/
-│   │   └── rest-webflux/         # Punto de entrada REST (WebFlux)
+│   │   └── rest-webflux/         # Adaptador de entrada REST (FranquiciasController)
 │   └── helpers/                  # Utilidades compartidas
 ├── deployment/                   # Dockerfile, docker-compose
 ├── build.gradle
 └── settings.gradle
 ```
 
-### Capas
+### Capas y dependencias
 
-| Capa | Módulos | Responsabilidad |
-|------|---------|-----------------|
-| **Domain** | model, usecase | Entidades, puertos y reglas de negocio. Independiente del marco. |
-| **Infrastructure** | driven-adapters, entry-points | Implementaciones: R2DBC, controladores REST. |
-| **Application** | app-service | Inyección de dependencias y arranque de la aplicación. |
+| Capa | Módulos | Responsabilidad | Depende de |
+|------|---------|-----------------|------------|
+| **Domain (model)** | model | Entidades `Franchise`, `Branch`, `Product` y puertos (`FranchiseRepository`, `BranchRepository`, `ProductRepository`). Sin dependencias externas. | — |
+| **Domain (usecase)** | usecase | 9 casos de uso que orquestan la lógica. Inyectan solo puertos (interfaces). | model |
+| **Infrastructure (driven)** | r2dbc-postgres | Implementan los puertos. Traducen dominio ↔ entidades R2DBC. | model |
+| **Infrastructure (entry)** | rest-webflux | Controlador REST, DTOs, mapeo HTTP ↔ casos de uso. | usecase |
+| **Application** | app-service | `UseCaseConfig` ensambla beans; inyecta adaptadores en casos de uso. | usecase, r2dbc-postgres, rest-webflux |
+
+### Flujo de una petición
+
+```
+HTTP Request → FranquiciasController → UseCase → Puerto (interfaz) → Adaptador R2DBC → PostgreSQL
+                      ↓                    ↓
+                   DTOs              Modelos de dominio
+                   (validación)      (Franchise, Branch, Product)
+```
+
+El dominio **no conoce** Spring, REST ni bases de datos. Solo define contratos (puertos) y entidades puras.
 
 ---
 
-## Consideraciones de diseño
+## Patrones de diseño
 
-- **Modelo reactivo**: Uso de Project Reactor (`Mono`/`Flux`) en toda la capa de aplicación y acceso a datos.
-- **Dependencias invertidas**: Los use cases dependen de puertos (interfaces); los adaptadores implementan esos puertos.
-- **Modelos inmutables**: Entidades de dominio como records con validaciones en el constructor.
-- **Validación en capas**: Validación en DTOs (Jakarta Validation) y en la capa de dominio.
-- **Respuestas estándar**: Errores bajo RFC 7807 (Problem Details) con `GlobalExceptionHandler`.
+| Patrón | Dónde se aplica | Descripción |
+|--------|------------------|-------------|
+| **Ports & Adapters (Hexagonal)** | model, usecase, infrastructure | El dominio expone **puertos** (interfaces como `FranchiseRepository`). Los **adaptadores** (`FranchiseRepositoryAdapter`, `FranquiciasController`) los implementan o los consumen. |
+| **Dependency Inversion** | usecase ← model | Los casos de uso dependen de `FranchiseRepository` (interfaz), no de `FranchiseRepositoryAdapter`. La implementación concreta se inyecta en tiempo de ejecución. |
+| **Use Case / Application Service** | domain/usecase | Cada operación de negocio es un caso de uso (`AddFranchiseUseCase`, `GetMaxStockProductsByFranchiseUseCase`, etc.). Encapsulan reglas y orquestan repositorios. |
+| **Repository** | model/port, r2dbc-postgres | Los puertos abstraen persistencia: `save()`, `findById()`, `findByFranchiseId()`, etc. Los adaptadores mapean entre `Franchise` (dominio) y `FranchiseEntity` (BD). |
+| **DTO (Data Transfer Object)** | rest-webflux/dto | Objetos como `FranchiseRequest`, `BranchResponse` separan el contrato HTTP del modelo de dominio. Evitan exponer entidades internas. |
+| **Record (inmutabilidad)** | model, dto | Entidades y DTOs como Java records: inmutables, con validación en el compact constructor (`Objects.requireNonNull`, `stock >= 0`). |
+| **Factory de beans** | UseCaseConfig | Configuración explícita de casos de uso con inyección por constructor. No se usa `@Component` en el dominio. |
+| **Controller Advice** | GlobalExceptionHandler | Manejo centralizado de excepciones. Traduce excepciones de dominio/infraestructura a RFC 7807 (Problem Details). |
+
+### Consideraciones adicionales
+
+- **Modelo reactivo**: Toda la cadena usa `Mono`/`Flux`. Los puertos devuelven tipos reactivos; el controlador expone `Mono<FranchiseResponse>`.
+- **Validación en capas**: DTOs con Jakarta Validation (`@NotBlank`, `@Size`, `@Positive`); dominios con validaciones en el constructor (ej. `Product`: stock no negativo).
 
 ---
 
